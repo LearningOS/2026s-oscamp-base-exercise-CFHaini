@@ -38,7 +38,7 @@
 //! - fd number reuse strategy (find smallest free slot)
 //! - `Arc` reference counting and resource release
 
-use std::sync::Arc;
+use std::{collections::btree_map::Values, sync::Arc};
 
 /// File abstraction trait — all "files" in the kernel (regular files, pipes, sockets) implement this
 pub trait File: Send + Sync {
@@ -51,13 +51,16 @@ pub struct FdTable {
     // TODO: Design the internal structure
     // Hint: use Vec<Option<Arc<dyn File>>>
     //       the index is the fd number, None means the fd is closed or unallocated
+    table: Vec<Option<Arc<dyn File>>>,
+    used:usize,
 }
 
 impl FdTable {
     /// Create an empty fd table
     pub fn new() -> Self {
         // TODO
-        todo!()
+        // todo!()
+        Self { table: Vec::new(),used:0 }
     }
 
     /// Allocate a new fd, return the fd number.
@@ -65,25 +68,70 @@ impl FdTable {
     /// Prefers reusing the smallest closed fd number; if no free slot, appends to the end.
     pub fn alloc(&mut self, file: Arc<dyn File>) -> usize {
         // TODO
-        todo!()
+        // todo!()
+
+        for (id, item) in self.table.iter_mut().enumerate(){
+            match item{
+                Some(_value)=>{
+                    ()
+                },
+                None=>{
+                    // flag =1;
+                    *item = Some(file);
+                    self.used += 1;
+                    return id;
+                }
+                
+            }
+        }
+        self.table.push(Some(file));
+        self.used +=1;
+        return self.table.len()-1;
     }
 
     /// Get the file object for an fd. Returns None if the fd doesn't exist or is closed.
     pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
         // TODO
-        todo!()
+        // todo!()
+        match self.table.get(fd){
+            Some(value)=>{
+                match value{
+                    Some(item)=>{
+                        return Some(Arc::clone(item));
+                    },
+                    None=>{
+                        return None;
+                    }
+                }
+            },
+            None=>{
+                return None;
+            }
+        }
+
     }
 
     /// Close an fd. Returns true on success, false if the fd doesn't exist or is already closed.
     pub fn close(&mut self, fd: usize) -> bool {
         // TODO
-        todo!()
+        // todo!()
+        match self.table.get_mut(fd){
+            Some(value)=>{
+                *value = None;
+                self.used -= 1;
+                return true;
+            },
+            None=>{
+                return false;
+            }
+        }
     }
 
     /// Return the number of currently allocated fds (excluding closed ones)
     pub fn count(&self) -> usize {
         // TODO
-        todo!()
+        // todo!()
+        return self.used;
     }
 }
 
