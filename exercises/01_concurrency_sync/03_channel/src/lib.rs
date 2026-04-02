@@ -15,10 +15,28 @@ use std::thread;
 /// The main thread receives all messages and returns them.
 pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
     // TODO: Create channel
+    let (sync_send,sync_receiver) = mpsc::channel();
+    let mut ans :Vec<String>= Vec::new();
+    thread::spawn(move || {
+        for item in items{
+            sync_send.send(item).unwrap();
+        }
+    });
+    loop{
+        match sync_receiver.recv(){
+            Ok(value)=>{
+                ans.push(value);
+            },
+            Err(_)=>{
+                break;
+            }
+        }
+    }
+    ans
     // TODO: Spawn thread to send each element in items
     // TODO: In main thread, receive all messages and collect into Vec
     // Hint: When all Senders are dropped, recv() returns Err
-    todo!()
+    // todo!()
 }
 
 /// Create `n_producers` producer threads, each sending a message in format `"msg from {id}"`.
@@ -27,10 +45,36 @@ pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
 /// Hint: Use `tx.clone()` to create multiple senders. Note that the original tx must also be dropped.
 pub fn multi_producer(n_producers: usize) -> Vec<String> {
     // TODO: Create channel
+    let (sync_sender,sync_receiver) = mpsc::channel();
+    let mut threads = Vec::new();
+    let mut ans : Vec<String>= Vec::new();
+    for id in 0..n_producers{
+        let sync_sender_clone = sync_sender.clone();
+        threads.push(thread::spawn(move || {
+            sync_sender_clone.send(format!("msg from {id}")).unwrap();
+        }));
+    }
+    
+    threads.into_iter().for_each(|thread|{
+        thread.join().unwrap();
+    });
+    drop(sync_sender);
+    loop{
+        match sync_receiver.recv(){
+            Ok(value)=>{
+                ans.push(value);
+            },
+            Err(_)=>{break;}
+        }
+    }
+    ans.sort();
+    ans
+
+
     // TODO: Clone a sender for each producer
     // TODO: Remember to drop the original sender, otherwise receiver won't finish
     // TODO: Collect all messages and sort
-    todo!()
+    // todo!()
 }
 
 #[cfg(test)]

@@ -17,10 +17,26 @@ use std::thread;
 /// Hint: Use `Arc<Mutex<usize>>` as the shared counter.
 pub fn concurrent_counter(n_threads: usize, count_per_thread: usize) -> usize {
     // TODO: Create Arc<Mutex<usize>> with initial value 0
+    let count = Arc::new(Mutex::new(0));
+    let count_per_thread = Arc::new(count_per_thread );
     // TODO: Spawn n_threads threads
+    let mut threads = Vec::new();
+    for _i in 0..n_threads{
+        let count_clone = Arc::clone(&count);
+        let count_per_thread_clone = Arc::clone(&count_per_thread);
+        threads.push(thread::spawn(move || {
+            let mut guard = count_clone.lock().unwrap();
+            *guard += *count_per_thread_clone;
+        }));
+    }
+    threads.into_iter().for_each(|thread|{
+        thread.join().expect("the thread creating or execution failed")
+    });
+    let x=*count.lock().unwrap();
+    x
     // TODO: In each thread, lock() and increment count_per_thread times
     // TODO: Join all threads, return final value
-    todo!()
+    // todo!()
 }
 
 /// Add elements to a shared vector concurrently using multiple threads.
@@ -30,9 +46,30 @@ pub fn concurrent_counter(n_threads: usize, count_per_thread: usize) -> usize {
 /// Hint: Use `Arc<Mutex<Vec<usize>>>`.
 pub fn concurrent_collect(n_threads: usize) -> Vec<usize> {
     // TODO: Create Arc<Mutex<Vec<usize>>>
+    let count = Arc::new(Mutex::new(vec![]));
     // TODO: Each thread pushes its own id
+    let mut threads = Vec::new();
+    for i in 0..n_threads{
+        let count_clone = Arc::clone(&count);
+        threads.push(thread::spawn(move || {
+            let mut guard = count_clone.lock().unwrap();
+            guard.push(i);
+        }));
+    }
+
+    threads.into_iter().for_each(|thread|{
+        thread.join().expect("the thread creating or execution failed")
+    });
+    // let mut ans =  count.lock().unwrap().clone();
+    let mut guard = count.lock().unwrap();
+    let mut ans = std::mem::take(&mut *guard);
+    ans.sort();
+    ans
+
+    
+
     // TODO: After joining all threads, sort the result and return
-    todo!()
+    // todo!()
 }
 
 #[cfg(test)]

@@ -16,6 +16,8 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(unused_variables)]
 
+// use std::intrinsics::offset;
+
 /// Copy `n` bytes from `src` to `dst`.
 ///
 /// - `dst` and `src` must not overlap (use `my_memmove` for overlapping regions)
@@ -25,9 +27,91 @@
 /// `dst` and `src` must each point to at least `n` bytes of valid memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
-    // TODO: Implement memcpy
-    // Hint: read bytes from src one by one and write to dst
-    todo!()
+    // if n == 0 || core::ptr::eq(dst as *const u8, src) {
+    //     return dst;
+    // }
+    // if n==0 || dst as usize ==src as usize {
+    //     return dst;
+    // }
+
+    // let mut offset = 0usize;
+    // let word = core::mem::size_of::<usize>();
+    // let align_mask = word - 1;
+
+    // if word > 1 && (((dst as usize) ^ (src as usize)) & align_mask) == 0 {
+    //     while offset < n && (((dst as usize) + offset) & align_mask) != 0 {
+    //         *dst.add(offset) = *src.add(offset);
+    //         offset += 1;
+    //     }
+
+    //     let mut dst_word = dst.add(offset) as *mut usize;
+    //     let mut src_word = src.add(offset) as *const usize;
+
+    //     while offset + word * 4 <= n {
+    //         *dst_word = *src_word;
+    //         *dst_word.add(1) = *src_word.add(1);
+    //         *dst_word.add(2) = *src_word.add(2);
+    //         *dst_word.add(3) = *src_word.add(3);
+    //         dst_word = dst_word.add(4);
+    //         src_word = src_word.add(4);
+    //         offset += word * 4;
+    //     }
+
+    //     while offset + word <= n {
+    //         *dst_word = *src_word;
+    //         dst_word = dst_word.add(1);
+    //         src_word = src_word.add(1);
+    //         offset += word;
+    //     }
+    // }
+
+    // while offset < n {
+    //     *dst.add(offset) = *src.add(offset);
+    //     offset += 1;
+    // }
+
+    // dst
+
+    if n ==0 || core::ptr::eq(dst as *const u8, src){
+        return dst;
+    }
+    let word = core::mem::size_of::<usize>();
+    let mut offset:usize =0;
+    let  align :usize = word -1;
+
+    if word>1 && (((dst as usize)^(src as usize))&align)==0{
+        while offset <n && ((dst as usize)+offset)&align !=0{
+            *dst.add(offset )= *src.add(offset);
+            offset += 1;
+        }
+        let mut dst_word = dst.add(offset) as *mut usize;
+        let mut src_word =  src.add(offset) as *mut usize;
+
+        while offset +word *4<=n{
+            *dst_word = *src_word;
+            *dst_word.add(1) = *src_word.add(1);
+            *dst_word.add(2) = *src_word.add(2);
+            *dst_word.add(3) = *src_word.add(3);
+            dst_word = dst_word.add(4);
+            src_word = src_word.add(4);
+
+            offset += word *4;
+        }
+        while offset + word <=n{
+            *dst_word = *src_word;
+            dst_word = dst_word.add(1);
+            src_word = src_word.add(1);
+            offset += word;
+        }
+
+    }
+
+    while offset < n{
+        *dst.add(offset) = *src.add(offset);
+        offset += 1;
+    }
+
+    dst
 }
 
 /// Set `n` bytes starting at `dst` to the value `c`.
@@ -39,7 +123,15 @@ pub unsafe extern "C" fn my_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *m
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_memset(dst: *mut u8, c: u8, n: usize) -> *mut u8 {
     // TODO: Implement memset
-    todo!()
+    // todo!()
+    // let word = core::mem::size_of::<usize>();
+    let mut offset :usize= 0;
+    let c_ptr: *const u8 = &c;
+    while offset < n{
+        *dst.add(offset) = *c_ptr;
+        offset += 1;
+    }   
+    dst
 }
 
 /// Copy `n` bytes from `src` to `dst`, correctly handling overlapping memory.
@@ -50,9 +142,54 @@ pub unsafe extern "C" fn my_memset(dst: *mut u8, c: u8, n: usize) -> *mut u8 {
 /// `dst` and `src` must each point to at least `n` bytes of valid memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_memmove(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
-    // TODO: Implement memmove
-    // Hint: when dst > src and regions overlap, copy backwards (from end to start)
-    todo!()
+    if n == 0 || core::ptr::eq(dst as *const u8, src) {
+        return dst;
+    }
+
+    let dst_addr = dst as usize;
+    let src_addr = src as usize;
+
+    if dst_addr <= src_addr || dst_addr - src_addr >= n {
+        return my_memcpy(dst, src, n);
+    }
+
+    let word = core::mem::size_of::<usize>();
+    let align_mask = word - 1;
+    let mut remaining = n;
+
+    if word > 1 && ((dst_addr ^ src_addr) & align_mask) == 0 {
+        while remaining > 0 && ((dst_addr + remaining) & align_mask) != 0 {
+            remaining -= 1;
+            *dst.add(remaining) = *src.add(remaining);
+        }
+
+        let mut dst_word = dst.add(remaining) as *mut usize;
+        let mut src_word = src.add(remaining) as *const usize;
+
+        while remaining >= word * 4 {
+            dst_word = dst_word.sub(4);
+            src_word = src_word.sub(4);
+            *dst_word.add(3) = *src_word.add(3);
+            *dst_word.add(2) = *src_word.add(2);
+            *dst_word.add(1) = *src_word.add(1);
+            *dst_word = *src_word;
+            remaining -= word * 4;
+        }
+
+        while remaining >= word {
+            dst_word = dst_word.sub(1);
+            src_word = src_word.sub(1);
+            *dst_word = *src_word;
+            remaining -= word;
+        }
+    }
+
+    while remaining > 0 {
+        remaining -= 1;
+        *dst.add(remaining) = *src.add(remaining);
+    }
+
+    dst
 }
 
 /// Return the length of a null-terminated byte string, excluding the trailing null.
@@ -62,7 +199,12 @@ pub unsafe extern "C" fn my_memmove(dst: *mut u8, src: *const u8, n: usize) -> *
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_strlen(s: *const u8) -> usize {
     // TODO: Implement strlen
-    todo!()
+    // todo!()
+    let mut len:usize = 0;
+    while *s.add(len)!=0{
+        len += 1;
+    }
+    len
 }
 
 /// Compare two null-terminated byte strings.
@@ -77,7 +219,24 @@ pub unsafe extern "C" fn my_strlen(s: *const u8) -> usize {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn my_strcmp(s1: *const u8, s2: *const u8) -> i32 {
     // TODO: Implement strcmp
-    todo!()
+    // todo!()
+    let mut offset :usize = 0;
+    loop {
+        let c1 = *s1.add(offset);
+        let c2 = *s2.add(offset);
+
+        if c1 != c2 {
+            return (c1 as i32) - (c2 as i32);
+        }
+
+        // 注意：必须在“相等之后”检查结束
+        if c1 == 0 {
+            return 0;
+        }
+
+        offset += 1;
+    }
+
 }
 
 // ============================================================

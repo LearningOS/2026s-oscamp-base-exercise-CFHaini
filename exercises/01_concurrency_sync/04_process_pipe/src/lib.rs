@@ -31,6 +31,7 @@
 //! Each function includes a `TODO` comment indicating where you need to write code.
 //! Run `cargo test` to check your implementations.
 
+// use std::collections::btree_map::Values;
 use std::io::{self, Read, Write};
 use std::process::{Command, Stdio};
 
@@ -50,10 +51,25 @@ use std::process::{Command, Stdio};
 /// 4. Convert the `stdout` field (a `Vec<u8>`) into a `String`.
 pub fn run_command(program: &str, args: &[&str]) -> String {
     // TODO: Use Command::new to create process
+    let  child = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to execute command");
+    let output = child.wait_with_output().expect("failed to read stdout");
+    let ans = match String::from_utf8(output.stdout){
+        Ok(value)=>{value},
+        Err(_)=>{
+            println!("failed variable ans");
+            String::new()
+        }
+    };
+    ans
+    
     // TODO: Set stdout to Stdio::piped()
     // TODO: Execute with .output() and get output
     // TODO: Convert stdout to String and return
-    todo!()
+    // todo!()
 }
 
 /// Write data to child process (cat) stdin via pipe and read its stdout output.
@@ -85,11 +101,31 @@ pub fn run_command(program: &str, args: &[&str]) -> String {
 /// 6. Wait for the child to exit with `.wait()` (or rely on drop‑wait).
 pub fn pipe_through_cat(input: &str) -> String {
     // TODO: Create "cat" command, set stdin and stdout to piped
+    let mut child = Command::new("cat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to execute cat");
+    let mut stdin = child.stdin.take().unwrap();
+    let _ = stdin.write_all(input.as_bytes());
+    drop(stdin);
+    let mut output :Vec<u8> = Vec::new();
+    let _ = child.stdout.take().unwrap().read_to_end(&mut output);
+    match String::from_utf8(output){
+        Ok(value)=>{
+            value
+        },
+        Err(_)=>{
+            println!("failed to return string");
+            String::new()
+        }
+    }
+    
     // TODO: Spawn process
     // TODO: Write input to child process stdin
     // TODO: Drop stdin to close pipe (otherwise cat won't exit)
     // TODO: Read output from child process stdout
-    todo!()
+    // todo!()
 }
 
 /// Get child process exit code.
@@ -108,9 +144,15 @@ pub fn pipe_through_cat(input: &str) -> String {
 /// 4. If the child terminated normally, return the exit code; otherwise return a default.
 pub fn get_exit_code(command: &str) -> i32 {
     // TODO: Use Command::new("sh").args(["-c", command])
+
+    let status = Command::new("sh")
+        .args(["-c",command])
+        .status()
+        .expect("failed to execute command");
+    status.code().unwrap_or(0)
     // TODO: Execute and get status
     // TODO: Return exit code
-    todo!()
+    // todo!()
 }
 
 /// Execute the given shell command and return its stdout output as a `Result`.
@@ -137,7 +179,25 @@ pub fn run_command_with_result(program: &str, args: &[&str]) -> io::Result<Strin
     // TODO: Set stdout to Stdio::piped()
     // TODO: Execute with .output() and handle Result
     // TODO: Convert stdout to String with from_utf8, mapping errors to io::Error
-    todo!()
+    // todo!()
+    let handle = Command::new(program)
+        .args(args)
+        .output();
+    let child = match handle{
+        Ok(value)=>value,
+        Err(e)=>{
+            return Err(e);
+        }
+    };
+    match String::from_utf8(child.stdout){
+        Ok(value)=>{
+            Ok(value)
+        },
+        Err(e)=>{
+            Err(io::Error::new(io::ErrorKind::InvalidData,e))
+        }
+    }
+
 }
 
 /// Interact with `grep` via bidirectional pipes, filtering lines that contain a pattern.
@@ -167,7 +227,30 @@ pub fn pipe_through_grep(pattern: &str, input: &str) -> String {
     // TODO: Drop stdin to close pipe
     // TODO: Read output from child stdout line by line
     // TODO: Collect and return matching lines
-    todo!()
+    // todo!()
+    let mut child = Command::new("grep")
+        .arg(pattern)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to execute command grep");
+    let mut stdin = child.stdin.take().unwrap();
+    let _ = stdin.write_all(input.as_bytes());
+    drop(stdin);
+
+    let mut output:Vec<u8> = Vec::new();
+    let _ = child.stdout.take().unwrap().read_to_end(&mut output);
+    match String::from_utf8(output){
+        Ok(value)=>{
+            value
+        },
+        Err(_)=>{
+            println!("failed to generate final answer");
+            String::new()
+        }
+    }
+
+
 }
 
 #[cfg(test)]
