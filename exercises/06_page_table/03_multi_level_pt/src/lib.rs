@@ -19,7 +19,7 @@
 //! └──────────┴───────────┴───────────┴───────────┘
 //! ```
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 /// 页大小 4KB
 pub const PAGE_SIZE: usize = 4096;
@@ -103,7 +103,8 @@ impl Sv39PageTable {
     /// 提示：右移 (12 + level * 9) 位，然后与 0x1FF 做掩码。
     pub fn extract_vpn(va: u64, level: usize) -> usize {
         // TODO: 从虚拟地址中提取指定级别的 VPN 索引
-        todo!()
+        // todo!()
+        ((va >>(12+level*9))&((1<<9)-1)) as usize
     }
 
     /// 建立从虚拟页到物理页的映射（4KB 页）。
@@ -119,7 +120,60 @@ impl Sv39PageTable {
         // 对于中间层级（level 2 和 level 1），如果对应 VPN 的页表项（PTE）无效（PTE_V == 0），
         // 则需要分配一个新的页表节点（使用 alloc_node），并将新节点的 PPN 写入当前 PTE（仅设置 PTE_V 标志）。
         // 最后在 level 0 的 PTE 中写入目标物理页号（pa >> 12）和 flags。
-        todo!()
+        // todo!()
+        let level2 = ((va >>(12+9*2))&((1<<9)-1)) as usize;
+        let level1 = ((va>>(12+9*1))&((1<<9)-1)) as usize;
+        let level0 = ((va>>12)&((1<<9)-1)) as usize;
+        // if let Some(value)=self.nodes.get(&level2){
+
+        // }
+        let bpe = self.root_ppn;
+        let level2_table = self.nodes.get(&bpe).unwrap();
+        let level2_entry = level2_table.entries[level2];
+        if level2_entry&PTE_V == 0{
+            let ppn = self.alloc_node();
+            self.nodes.get_mut(&bpe).unwrap().entries[level2] = (ppn<<PPN_SHIFT)|PTE_V;
+        }
+
+        let level1_table_index = self.nodes.get(&bpe).unwrap().entries[level2]>>PPN_SHIFT;
+        // match self.nodes.get(&level1_table_index){
+        //     Some(value)=>{
+        //         let level1_entry = value.entries[level1];
+        //         if level1_entry&PTE_V ==0{
+        //             let ppn = self.alloc_node();
+        //             self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = (ppn<<PPN_SHIFT)|PTE_V;
+        //         }
+        //     },
+        //     None=>{
+        //         let ppn = self.alloc_node();
+        //         self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = (ppn<<PPN_SHIFT)|PTE_V;
+        //     }
+        // }
+        let level1_table = self.nodes.get(&level1_table_index).unwrap();
+        let level1_entry = level1_table.entries[level1];
+        if level1_entry & PTE_V ==0{
+            let ppn = self.alloc_node();
+            self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = (ppn<<PPN_SHIFT)|PTE_V;
+        }
+
+        let level0_table_index = self.nodes.get(&level1_table_index).unwrap().entries[level1]>>PPN_SHIFT;
+        // match self.nodes.get(&level0_table_index){
+        //     Some(_value)=>{
+        //         // let level0_entry = value.entries[level0];
+        //         self.nodes.get_mut(&level0_table_index).unwrap().entries[level0] = ((pa>>12)<<PPN_SHIFT)|flags;
+        //     },
+        //     None=>{
+        //         let _ppn = self.alloc_node();
+        //         self.nodes.get_mut(&level0_table_index).unwrap().entries[level0] = ((pa>>12)<<PPN_SHIFT)|flags;
+        //     }
+        // }
+
+        // let level0_table = self.nodes.get(&level0_table_index).unwrap();
+        // let level0_entry = level0_table.entries[level0];
+            // let ppn = self.alloc_node();
+        self.nodes.get_mut(&level0_table_index).unwrap().entries[level0] = ((pa>>12)<<PPN_SHIFT)|flags;   
+
+
     }
 
     /// 遍历三级页表，将虚拟地址翻译为物理地址。
@@ -141,7 +195,71 @@ impl Sv39PageTable {
         // 如果 PTE 是叶节点（即 R、W、X 标志位中有至少一个被置位），则可以直接使用该 PTE 中的物理页号（PPN）计算最终的物理地址。
         // 否则，该 PTE 指向下一级页表节点，继续遍历下一级。
         // 遍历到 level 0 时，PTE 必须是叶节点。
-        todo!()
+        // todo!()
+        let level2 = Sv39PageTable::extract_vpn(va,2);
+        let level1 = Sv39PageTable::extract_vpn(va,1);
+        let level0 = Sv39PageTable::extract_vpn(va,0);
+        // let offset = va&((1<<12)-1);
+
+        let bpe = self.root_ppn;
+
+
+        let level2_table = self.nodes.get(&bpe).unwrap();
+        let level2_entry = level2_table.entries[level2];
+        if level2_entry&PTE_V ==0{
+            return TranslateResult::PageFault;
+        }
+        if level2_entry &PTE_R==PTE_R || level2_entry&PTE_W ==PTE_W || level2_entry&PTE_X == PTE_X{
+            let ans = ((level2_entry>>(PPN_SHIFT+18))<<(12+18))|(va&((1<<30)-1));
+            return TranslateResult::Ok(ans);
+        }
+
+
+        let level1_table_index = level2_entry>>PPN_SHIFT;
+
+
+        match self.nodes.get(&level1_table_index){
+            Some(value)=>{
+                let level1_entry = value.entries[level1];
+                if level1_entry &PTE_V==0{
+                    return TranslateResult::PageFault;
+                }
+            },
+            None=>{
+                return TranslateResult::PageFault;
+            }
+        }
+        let level1_entry = self.nodes.get(&level1_table_index).unwrap().entries[level1];
+
+        if level1_entry &PTE_R==PTE_R || level1_entry&PTE_W ==PTE_W || level1_entry&PTE_X == PTE_X{
+            let ans = ((level1_entry>>(PPN_SHIFT+9))<<(12+9))|(va&((1<<21)-1));
+            return TranslateResult::Ok(ans);
+        }
+
+
+        
+        let level0_table_index = level1_entry>>PPN_SHIFT;
+
+        match self.nodes.get(&level0_table_index){
+            Some(value)=>{
+                let level0_entry = value.entries[level0];
+                if level0_entry & PTE_V ==0{
+                    return TranslateResult::PageFault;
+                }
+            },
+            None=>{
+                return TranslateResult::PageFault;
+            }
+        }
+
+        let level0_entry = self.nodes.get(&level0_table_index).unwrap().entries[level0];
+
+        let ans = ((level0_entry>>PPN_SHIFT)<<12)|(va&((1<<12)-1));
+        return TranslateResult::Ok(ans);
+
+
+        
+
     }
 
     /// 建立大页映射（2MB superpage，在 level 1 设叶子 PTE）。
@@ -160,7 +278,37 @@ impl Sv39PageTable {
         // 你需要在 level 2 找到或创建中间页表节点，然后在 level 1 写入叶子 PTE。
         // 注意大页的物理页号计算方式与普通页相同（pa >> 12），
         // 但翻译时 offset 包含虚拟地址的低 21 位（VPN[0] 部分 + 12 位页内偏移）。
-        todo!()
+        // todo!()
+        let level2 = Sv39PageTable::extract_vpn(va, 2);
+        let level1 = Sv39PageTable::extract_vpn(va, 1);
+        let bpe = self.root_ppn;
+
+        let level2_table = self.nodes.get(&bpe).unwrap();
+        let level2_entry = level2_table.entries[level2];
+        if level2_entry&PTE_V == 0{
+            let ppn = self.alloc_node();
+            self.nodes.get_mut(&bpe).unwrap().entries[level2] = (ppn<<PPN_SHIFT)|PTE_V;
+        }
+
+
+        let level1_table_index = self.nodes.get(&bpe).unwrap().entries[level2]>>PPN_SHIFT;
+        // match self.nodes.get(&level1_table_index){
+        //     Some(_value)=>{
+        //         // let level1_entry = value.entries[level1];
+        //         self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = ((pa>>12)<<PPN_SHIFT)|flags;
+                
+        //     },
+        //     None=>{
+        //         let _ppn = self.alloc_node();
+        //         self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = ((pa>>12)<<PPN_SHIFT)|flags;
+        //     }
+        // }
+        let level1_table = self.nodes.get(&level1_table_index).unwrap();
+        let level1_entry = level1_table.entries[level1];
+        if level1_entry&PTE_V ==0{
+            self.nodes.get_mut(&level1_table_index).unwrap().entries[level1] = ((pa>>12)<<PPN_SHIFT)|flags;
+        }
+
     }
 }
 
